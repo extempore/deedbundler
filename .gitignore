@@ -1,0 +1,4 @@
+*.pyc
+deeds_config.json
+test.py
+test_gpg2.py
