@@ -14,7 +14,7 @@ from threading import Thread
 import requests
 import gnupg
 
-from electrum import NetworkProxy, Wallet, WalletStorage, SimpleConfig
+from electrum import NetworkProxy, Wallet, WalletStorage, SimpleConfig, Transaction
 from electrum.daemon import get_daemon
 from electrum.bitcoin import b58encode, b58decode
 
@@ -61,14 +61,22 @@ class Bundler(object):
 		print 'tx_sender thread started'
 		while True:
 			tx = self.tx_queue.get()
-			result = self.wallet.sendtx(tx)
+			if not isinstance(tx, Transaction):
+				print 'txsender: wtfisthis: {0}'.format(tx)
+				time.sleep(1)
+				continue
+			try:
+				result = self.wallet.sendtx(tx)
+			except Exception as e:
+				print 'txsender: {0}'.format(e)
+
 			if not result[0]:
 				# sendtx failed, sleep and re-queue
 				print 'tx_sender: sendtx failed'
-				time.sleep(1)
+				time.sleep(2)
 				self.tx_queue.put(tx)
 			else:
-				print 'tx_sender: {0}'.format(tx.hash())
+				print 'tx_sender: sent {0}'.format(tx.hash())
 
 	def trust_updater(self):
 		print 'trust_updater thread started'
@@ -80,8 +88,8 @@ class Bundler(object):
 				if new_keys:
 					self.gpg.recv_keys(new_keys)
 				print 'trust_updater: {0} new keys'.format(len(new_keys))
-			except:
-				pass
+			except Exception as e:
+				print 'trust_updater: {0}'.format(e)
 
 	def load_assbot_trust(self):
 		self.otcdb.open_db()
@@ -318,7 +326,7 @@ class Bundler(object):
 				new_tx = self.make_tx(address)
 			except:
 				return (False, 'retry_mktx_fail')
-			new_txid = tx.hash()
+			new_txid = new_tx.hash()
 			if txid != new_txid:
 				update_txid = 'UPDATE bundles SET txid = ? WHERE id = ?'
 				cursor.execute(update_txid, (new_txid, row['id']))

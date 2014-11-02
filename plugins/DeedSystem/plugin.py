@@ -156,7 +156,10 @@ class DeedSystem(callbacks.Plugin):
             raise
         except Exception as e:
             print e
-     
+  
+        if msg != 'no_unconfirmed' and msg != 'waiting_for_confirm':
+            print 'confirm: {0}'.format(msg)
+   
         if success:
             address, txid = msg
             url = self._bundle_url(address, short=True, length=8)
@@ -166,8 +169,7 @@ class DeedSystem(callbacks.Plugin):
                 msg = ircmsgs.privmsg(channel, txt)
                 irc.queueMsg(msg)
 
-        if msg != 'no_unconfirmed' and msg != 'waiting_for_confirm':
-            print 'confirm: {0}'.format(msg)
+
 
     def _bundle_url(self, address, short=False, length=None):
         host = self.deeds.config['hostname']
