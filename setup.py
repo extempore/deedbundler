@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name='deedbundler',
-    version='0.4',
+    version='0.5',
     url='https://github.com/extempore',
     license='Proprietary',
     author='punkman',
@@ -12,6 +12,9 @@ setup(
         'deedbundler',
 	'deedbundler.packages',
 	'deedbundler.packages.coinkit',
+	'deedbundler.packages.coinkit.passphrases',
+	'deedbundler.packages.coinkit.services',
+	'deedbundler.packages.coinkit.transactions',
     ],
     package_dir = {'deedbundler': 'deedbundler'},
     install_requires=[
