@@ -17,7 +17,6 @@ slowaes==0.1a1
 tlslite==0.4.6
 utilitybelt==0.1.4
 wsgiref==0.1.2
-coinkit==0.5.4
 -e git://github.com/spesmilo/electrum.git@063fc4bb2edcf38ff87b77f6ea21553e2762ac27#egg=Electrum-master
 -e git://github.com/ProgVal/Limnoria.git@13c2bd3fcc5e42a8f57f1faa6d97bd7b1df37a86#egg=limnoria-master
 uWSGI==2.1
