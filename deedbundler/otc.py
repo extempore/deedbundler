@@ -70,12 +70,12 @@ class Otcdb(object):
 			add = 1 if row['rating'] > 0 else -1
 			assbot_trust[ row['nick'] ] += add
 
-		selkey = 'SELECT fingerprint FROM users WHERE nick = ? AND fingerprint IS NOT NULL'
+		selkey = 'SELECT fingerprint FROM users WHERE lower(nick) = ? AND fingerprint IS NOT NULL'
 		gcursor = self.gdb.cursor()
 
 		for nick in assbot_trust:
 			if  assbot_trust[nick] > 0:
-				gcursor.execute(selkey, (nick,))
+				gcursor.execute(selkey, (nick.lower(),))
 				row = gcursor.fetchone()
 				if row:
 					trusted[ row['fingerprint'] ] = (nick, assbot_trust[nick])

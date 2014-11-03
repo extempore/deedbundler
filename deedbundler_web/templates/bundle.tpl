@@ -34,7 +34,10 @@
 </div>
 
 <div class="links">
-<a href="{{canonical}}/json">Download JSON</a> | <a href="{{full_bundle}}">Download full bundle</a>
+<p>
+Download bundle: 
+<a href="{{canonical}}/json">JSON</a> | 
+<a href="{{full_bundle}}">Raw</a>
+</p>
 </div>
-
 
