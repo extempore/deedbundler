@@ -7,6 +7,7 @@
 import time
 import json
 from getpass import getpass
+from Queue import Queue
 
 import supybot.utils as utils
 from supybot.commands import *
@@ -48,13 +49,18 @@ class DeedSystem(callbacks.Plugin):
         def confirm_bundle():
             self._confirm_bundle(irc)
 
+        def trust_updates():
+            self._trust_updates(irc)
+
         schedule.addPeriodicEvent(make_bundle, deeds_config['make_bundle_interval'], now=False, name='make_bundle')
         schedule.addPeriodicEvent(confirm_bundle, deeds_config['confirm_bundle_interval'], now=False, name='confirm_bundle')
+        schedule.addPeriodicEvent(trust_updates, deeds_config['confirm_bundle_interval']/10, now=False, name='trust_updates')
 
     def die(self):
         try:
             schedule.removeEvent('make_bundle')
             schedule.removeEvent('confirm_bundle')
+            schedule.removeEvent('trust_updates')
         except:
             pass
 
@@ -128,6 +134,7 @@ class DeedSystem(callbacks.Plugin):
 
     status = wrap(status, ['public'])
 
+    ## scheduled actions
 
     def _make_bundle(self, irc):
         print 'make: start'
@@ -137,6 +144,8 @@ class DeedSystem(callbacks.Plugin):
             raise
         except Exception as e:
             print e
+            return
+
         print 'make: {0}'.format(msg)
 
         if success:
@@ -156,6 +165,7 @@ class DeedSystem(callbacks.Plugin):
             raise
         except Exception as e:
             print e
+            return
   
         if msg != 'no_unconfirmed' and msg != 'waiting_for_confirm':
             print 'confirm: {0}'.format(msg)
@@ -169,6 +179,33 @@ class DeedSystem(callbacks.Plugin):
                 msg = ircmsgs.privmsg(channel, txt)
                 irc.queueMsg(msg)
 
+    def _trust_updates(self, irc):
+        try:
+            changed = self.deeds.trust_notify.get(block=False)
+            txt = '[trust-update]'
+
+            if changed:
+                added = []
+                removed = []
+                for c in changed:
+                    if c[0] == 'add':
+                        added.append(c[2])
+                    elif c[0] == 'rm':
+                        removed.append(c[2])
+                if added:
+                    txt += ' added: {0}'.format(', '.join(added))
+                if removed:
+                    txt += ' | removed: {0}'.format(', '.join(removed))
+            else:
+                txt += ' no changes'
+
+            # announce trust updates
+            for channel in irc.state.channels:
+                msg = ircmsgs.privmsg(channel, txt)
+                irc.queueMsg(msg)
+
+        except Queue.Empty:
+            pass
 
 
     def _bundle_url(self, address, short=False, length=None):

@@ -43,10 +43,12 @@ class Bundler(object):
 		self.network, self.wallet = electrum_start(self.config['electrum_config'])
 		# start threads
 		self.tx_queue = Queue()
+		self.trust_notify = Queue()
 		if not self.dry_run:
 			tx_sender = Thread(target=self.tx_sender)
 			tx_sender.daemon = True
 			tx_sender.start()
+		self.trust_queue = Queue()
 		if self.update_trust:
 			trust_updater = Thread(target=self.trust_updater)
 			trust_updater.daemon = True
@@ -84,22 +86,37 @@ class Bundler(object):
 			time.sleep(self.config['update_trust_interval'])
 			try:
 				self.otcdb.update_db()
-				new_keys = self.load_assbot_trust()
+				new_keys, removed = self.load_assbot_trust()
 				if new_keys:
 					self.gpg.recv_keys(new_keys)
-				print 'trust_updater: {0} new keys'.format(len(new_keys))
+				#if removed:
+				#	self.gpg.delete_keys(r[0] for r in removed)
+				changed =[]
+				for nk in new_keys:
+					changed.append(('add', nk) + self.trusted[nk])
+				for r in removed:
+					changed.append(('rm',) + r)
+				self.trust_notify.put(changed)
+				print 'trust_updater: {0} added {1} removed'.format(len(new_keys), len(removed))
 			except Exception as e:
 				print 'trust_updater: {0}'.format(e)
 
 	def load_assbot_trust(self):
+		# get assbot trust
 		self.otcdb.open_db()
 		trusted = self.otcdb.assbot_trust()
 		self.otcdb.close_db()
+		# check for changes
 		new_keys = []
+		removed_keys = []
 		if self.trusted:
 			new_keys = list(set(trusted.keys()) - set(self.trusted.keys()))
+			removed_keys = list(set(self.trusted.keys()) - set(trusted.keys()))
+		# add metadata in removed list before we throw it away
+		removed = [(rk,self.trusted[rk][0],self.trusted[rk][1]) for rk in removed_keys]
+		# replace with new set of keys
 		self.trusted = trusted
-		return new_keys
+		return (new_keys, removed)
 
 	def _commit(self):
 		'''a commit wrapper to give it another few tries if it errors.
@@ -376,9 +393,11 @@ class Bundler(object):
 			# hash deed
 			dh = hashlib.sha256(deed)
 			deed_hash = dh.hexdigest()
+			# encode hash
+			b58_hash = b58encode(dh.digest())
 			# skip if deed already exists
-			sel = 'SELECT id FROM deeds WHERE deed_hash = ?'
-			if cursor.execute(sel, (deed_hash,)).fetchone():
+			sel = 'SELECT id FROM deeds WHERE b58_hash = ?'
+			if cursor.execute(sel, (b58_hash,)).fetchone():
 				errors['dupe'] += 1
 				continue
 			# skip if deed is too big
@@ -398,8 +417,7 @@ class Bundler(object):
 					continue
 				# parse deed title
 				title = deed_title(deed)
-				# encode hash
-				b58_hash = b58encode(dh.digest())
+
 				otc_name = self.trusted[fingerprint][0]
 				data = (fingerprint, otc_name, deed_hash, b58_hash, deed, title)
 				filtered.append(data)
