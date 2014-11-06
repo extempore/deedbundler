@@ -16,10 +16,10 @@ class Otcdb(object):
 
 	def open_db(self):
 		gpg_path = '{0}/{1}'.format(self.path, self.gpg_file)
-		self.gdb = sqlite3.connect(gpg_path)
+		self.gdb = sqlite3.connect(gpg_path, check_same_thread=False)
 		self.gdb.row_factory = sqlite3.Row
 		rating_path = '{0}/{1}'.format(self.path, self.rating_file)
-		self.rdb = sqlite3.connect(rating_path)
+		self.rdb = sqlite3.connect(rating_path, check_same_thread=False)
 		self.rdb.row_factory = sqlite3.Row
 
 	def close_db(self):
@@ -55,7 +55,7 @@ class Otcdb(object):
 			return False
 
 	def assbot_trust(self):
-		assbot_trust = defaultdict(int)
+		assbot_ratings = defaultdict(int)
 		trusted = {}
 
 		sel = """SELECT nick, rated_user_id, rater_user_id, rating FROM ratings
@@ -68,17 +68,16 @@ class Otcdb(object):
 		
 		for row in results:
 			add = 1 if row['rating'] > 0 else -1
-			assbot_trust[ row['nick'] ] += add
+			assbot_ratings[ row['nick'] ] += add
 
 		selkey = 'SELECT fingerprint FROM users WHERE lower(nick) = ? AND fingerprint IS NOT NULL'
 		gcursor = self.gdb.cursor()
 
-		for nick in assbot_trust:
-			if  assbot_trust[nick] > 0:
-				gcursor.execute(selkey, (nick.lower(),))
-				row = gcursor.fetchone()
+		for nick in assbot_ratings:
+			if  assbot_ratings[nick] > 0:
+				row = gcursor.execute(selkey, (nick.lower(),)).fetchone()
 				if row:
-					trusted[ row['fingerprint'] ] = (nick, assbot_trust[nick])
+					trusted[ row['fingerprint'] ] = (nick, assbot_ratings[nick])
 		return trusted
 
 
@@ -106,12 +105,14 @@ class GPGManager(object):
 				if k in chunk: not_found.append(k)
 
 			imported += r.counts['imported']
-			print imported
 
 		return (imported, not_found)
 
 	def verify(self, data):
 		return self.gpg.verify(data)
+
+	def delete_keys(self, fingerprints):
+		return self.gpg.delete_keys(fingerprints)
 
 
 def chunks(l, n):

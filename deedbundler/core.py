@@ -5,6 +5,7 @@ import re
 import time
 import hashlib
 import zlib
+import json
 import sqlite3
 from decimal import Decimal
 from collections import defaultdict
@@ -37,18 +38,17 @@ class Bundler(object):
 	def setup(self):
 		self.open_db()
 		self.otcdb = Otcdb(self.config['db_path'])
-		self.load_assbot_trust()
 		self.gpg = GPGManager(self.config['gpg_path'])
+		self.load_assbot_trust()
 		# start electrum
 		self.network, self.wallet = electrum_start(self.config['electrum_config'])
 		# start threads
 		self.tx_queue = Queue()
-		self.trust_notify = Queue()
 		if not self.dry_run:
 			tx_sender = Thread(target=self.tx_sender)
 			tx_sender.daemon = True
 			tx_sender.start()
-		self.trust_queue = Queue()
+		self.trust_notify = Queue()
 		if self.update_trust:
 			trust_updater = Thread(target=self.trust_updater)
 			trust_updater.daemon = True
@@ -87,17 +87,21 @@ class Bundler(object):
 			try:
 				self.otcdb.update_db()
 				new_keys, removed = self.load_assbot_trust()
+
 				if new_keys:
 					self.gpg.recv_keys(new_keys)
-				#if removed:
-				#	self.gpg.delete_keys(r[0] for r in removed)
-				changed =[]
-				for nk in new_keys:
-					changed.append(('add', nk) + self.trusted[nk])
-				for r in removed:
-					changed.append(('rm',) + r)
+				if removed:
+					self.gpg.delete_keys([r[0] for r in removed])
+				
+				# get changed nicknames
+				changed = (
+					[self.trusted[nk][0] for nk in new_keys],
+					[rk[1] for rk in removed],
+					)
 				self.trust_notify.put(changed)
 				print 'trust_updater: {0} added {1} removed'.format(len(new_keys), len(removed))
+
+
 			except Exception as e:
 				print 'trust_updater: {0}'.format(e)
 
@@ -110,13 +114,28 @@ class Bundler(object):
 		new_keys = []
 		removed_keys = []
 		if self.trusted:
-			new_keys = list(set(trusted.keys()) - set(self.trusted.keys()))
-			removed_keys = list(set(self.trusted.keys()) - set(trusted.keys()))
+			new = set(trusted.keys())
+			old = set(self.trusted.keys())
+			new_keys = list(new - old)
+			removed_keys = list(old - new)
 		# add metadata in removed list before we throw it away
 		removed = [(rk,self.trusted[rk][0],self.trusted[rk][1]) for rk in removed_keys]
 		# replace with new set of keys
 		self.trusted = trusted
+
+		# save trust.json
+		self.export_trust()
+
 		return (new_keys, removed)
+
+	def export_trust(self):
+		#filename = '{0}/{1}'.format(self.config['db_path'], 'trust.sqlite')
+		#db = sqlite3.connect(filename, check_same_thread=False)
+		#cursor = db.cursor()
+		filename = '/home/deedbot/app/www/trust.json'
+		with open(filename, 'w') as jsfile:
+			json.dump(self.trusted, jsfile, sort_keys=True, indent=0)
+
 
 	def _commit(self):
 		'''a commit wrapper to give it another few tries if it errors.
@@ -272,12 +291,9 @@ class Bundler(object):
 			return (False, 'dupe_bundle')
 
 		# create address
-		k = BitcoinPrivateKey(bundle_hash)
-		address = k.public_key().address()
-		wif = k.to_wif()		
+		address, wif = self.make_address(bundle_hash)		
 
 		# make transaction
-		# will block if wallet is not up to date
 		try:
 			tx = self.make_tx(address)
 		except:
@@ -426,6 +442,12 @@ class Bundler(object):
 				errors['invalid'] += 1
 
 		return (filtered, errors)
+
+	def make_address(self, bundle_hash):
+		k = BitcoinPrivateKey(bundle_hash)
+		address = k.public_key().address()
+		wif = k.to_wif()
+		return (address, wif)
 
 	def make_tx(self, address):
 		# update wallet so we have the latest inputs

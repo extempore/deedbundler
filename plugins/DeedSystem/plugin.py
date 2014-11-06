@@ -181,23 +181,21 @@ class DeedSystem(callbacks.Plugin):
 
     def _trust_updates(self, irc):
         try:
-            changed = self.deeds.trust_notify.get(block=False)
+            added, removed = self.deeds.trust_notify.get(block=False)
             txt = '[trust-update]'
 
-            if changed:
-                added = []
-                removed = []
-                for c in changed:
-                    if c[0] == 'add':
-                        added.append(c[2])
-                    elif c[0] == 'rm':
-                        removed.append(c[2])
+            if added or removed:
                 if added:
                     txt += ' added: {0}'.format(', '.join(added))
                 if removed:
-                    txt += ' | removed: {0}'.format(', '.join(removed))
+                    if added: 
+                        txt += ' |'
+                    txt += ' removed: {0}'.format(', '.join(removed))
             else:
                 txt += ' no changes'
+                msg = ircmsgs.privmsg('#punkbot', txt)
+                irc.queueMsg(msg)
+                return
 
             # announce trust updates
             for channel in irc.state.channels:

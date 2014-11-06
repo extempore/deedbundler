@@ -31,7 +31,7 @@ def extract_gpg(text):
 	deeds = sig_rx.findall(text)
 	return deeds
 
-title_rx = re.compile('DEED_TITLE:\s*(.+)', re.IGNORECASE)
+title_rx = re.compile('(?:DEED_TITLE|TITLE):\s*(.+)', re.IGNORECASE)
 
 def deed_title(text):
 	match = title_rx.search(text)
