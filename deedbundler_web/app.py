@@ -37,9 +37,8 @@ def deed_url(h, short=False, length=None):
 	url = 'http://{0}/{1}/{2}'.format(host, path, dhash)
 	return url
 
-def bundle_page_url(page):
+def bundle_page_url(page, path='bundles'):
 	host = CONFIG['hostname']
-	path = 'bundles'
 	if page > 0:
 		url = 'http://{0}/{1}/{2}'.format(host, path, page)
 	else:
@@ -64,18 +63,20 @@ def index():
 	db = get_db()
 	cursor = db.cursor()
 
-	pend_sel = 'SELECT b58_hash, otc_name, created_at, title FROM deeds WHERE bundled_at = 0 ORDER BY created_at DESC'
-	cursor.execute(pend_sel)
-	pending = cursor.fetchall()
+	dlimit = CONFIG['deeds_per_page_index']
+	deed_sel = """SELECT b58_hash, otc_name, created_at, title, bundled_at, bundle_address 
+			FROM deeds ORDER BY created_at DESC LIMIT ?"""
+	cursor.execute(deed_sel, (dlimit,))
+	deeds = cursor.fetchall()
 
-	limit = CONFIG['bundles_per_page_index']
+	blimit = CONFIG['bundles_per_page_index']
 	bundle_sel = """SELECT address, num_deeds, created_at, confirmed_at, txid 
 			FROM bundles ORDER BY created_at DESC LIMIT ?"""
-	cursor.execute(bundle_sel, (limit,))
+	cursor.execute(bundle_sel, (blimit,))
 	bundles = cursor.fetchall()
 
 	data = {
-		'pending_deeds': pending,
+		'recent_deeds': deeds,
 		'recent_bundles': bundles,
 		}
 
@@ -169,7 +170,7 @@ def bundle(address, format=None):
 	deed_hashes = row['deed_hashes'].split(',')
 
 	sel_deeds = """SELECT b58_hash, title, otc_name, created_at FROM deeds
-		      WHERE bundle_address = ? ORDER BY created_at ASC""".format(row['address'])
+		      WHERE bundle_address = ? ORDER BY created_at ASC"""
 	cursor.execute(sel_deeds, (row['address'],))
 	deeds = []
 	for d in cursor.fetchall():
@@ -181,7 +182,7 @@ def bundle(address, format=None):
 			}
 		deeds.append(deed)
 
-        full_bundle_url = 'http://{0}/raw_bundles/{1}/{2}.rbundle'.format(CONFIG['hostname'], address[0:2], address)
+        full_bundle_url = 'http://{0}/raw_bundles/{1}/{2}.rbundle'.format(CONFIG['hostname'], address[0:2], row['address'])
 
 	data = {
 		'address': row['address'],
@@ -207,7 +208,49 @@ def bundle(address, format=None):
 
 	return template('bundle.tpl', **data)
 
+@app.get('/from/<nick>')
+@app.get('/from/<nick>/<format>')
+def user(nick, format=None):
+	db = get_db()
+	cursor = db.cursor()
+
+	sel_deeds = """SELECT b58_hash, fingerprint, title, created_at, bundle_address, bundled_at FROM deeds
+		      WHERE otc_name = ? ORDER BY created_at DESC""".format(nick)
+	cursor.execute(sel_deeds, (nick,))
+
+	deeds = []
+	for d in cursor.fetchall():
+		deed = {
+			'b58_hash': d['b58_hash'],
+			'title': d['title'],
+			'fingerprint': d['fingerprint'],
+			'created_at': d['created_at'],
+			'bundled_at': d['bundled_at'],
+			'bundle_address': d['bundle_address'],
+			}
+		deeds.append(deed)
+
+	if not deeds:
+		raise HTTPError(status=404)
+
+	data = {
+		'otc_name': nick,
+		'fingerprint': deeds[0]['fingerprint'],
+		'num_deeds': len(deeds),
+		'deeds': deeds,
+		'updated': deeds[0]['created_at']
+		}
+
+	if format == 'rss':
+		return template('user_rss.tpl', **data)
+	elif format == 'json':
+		return data
+
+	return template('user.tpl', **data)
+
+
 @app.get('/bundles')
+@app.get('/bundles/')
 @app.get('/bundles/<page:int>')
 def bundles(page=0):
 	db = get_db()
@@ -237,6 +280,38 @@ def bundles(page=0):
 	data = {'bundles': bundles, 'page': page, 'links': links}
 
 	return template('bundles.tpl', **data)
+
+@app.get('/deeds')
+@app.get('/deeds/')
+@app.get('/deeds/<page:int>')
+def bundles(page=0):
+	db = get_db()
+	cursor = db.cursor()
+	per_page = CONFIG['deeds_per_page']
+	offset = page * per_page
+
+	count_sel = 'SELECT count(id) FROM deeds'
+	cursor.execute(count_sel)
+	total = cursor.fetchone()[0]
+	if (offset >= total):
+		raise HTTPError(status=404)
+
+	deed_sel = """SELECT b58_hash, otc_name, fingerprint, created_at, bundled_at, bundle_address, title
+			FROM deeds ORDER BY created_at DESC LIMIT ? OFFSET ?"""
+	cursor.execute(deed_sel, (per_page, offset))
+	deeds = cursor.fetchall()
+	if not deeds:
+		raise HTTPError(status=404)
+
+	links = []
+	max_page = (total / per_page)
+	if  max_page > 0:
+		for i in xrange(1, max_page + 1):
+			links.append(bundle_page_url(i, path='deeds'))
+
+	data = {'deeds': deeds, 'page': page, 'links': links}
+
+	return template('deeds.tpl', **data)
 
 ADDRESS_RX = re.compile('[0-9a-zA-Z]+$')
 def validate_address(s):

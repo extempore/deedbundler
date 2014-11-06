@@ -9,8 +9,10 @@ deeds_config = {
 	'gpg_path': '/home/deedbot/app/data/gpg',
 
 	'hostname': 'deeds.bitcoin-assets.com',
-	'bundles_per_page': 30,
-	'bundles_per_page_index': 15,
+	'bundles_per_page': 20,
+	'bundles_per_page_index': 10,
+	'deeds_per_page': 20,
+	'deeds_per_page_index': 10,
 
 	'main_address': '1LAwrWMbPLLSpt7nkD5Jv1Yf4cwPhD98ny',
 
@@ -35,13 +37,14 @@ deeds_config = {
 		'electrum_path': '/home/deedbot/app/data/electrum',
 		'portable': True,
 		'daemon_port': 8001,
-		'daemon_timeout': 30*60
+		'daemon_timeout': 30*60,
+		'auto_cycle': True,
 		}
 	}
 
 if __name__ == '__main__':
 
 	with open('./deeds_config.json', 'w') as f:
-		c = json.dumps(deeds_config)
+		c = json.dumps(deeds_config, sort_keys=True, indent=2)
 		f.write(c)
 

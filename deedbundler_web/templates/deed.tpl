@@ -9,9 +9,10 @@
 <ul>
   <li>otc name: <a href="{{otc_url(otc_name)}}">{{otc_name}}</a>
   <li>fingerprint: {{fingerprint}} </li>
-  <li>created: {{date(created_at)}}</li>
+  <li>keyid: {{fingerprint[24:]}}</li>
   <li>sha256: {{deed_hash}}</li>
-  <li>bundled: {{date(bundled_at) if bundled_at else 'n/a'}}</li>
+  <li>created: {{date(created_at)}}</li>
+  <li>bundled: {{date(bundled_at) if bundled_at else 'pending'}}</li>
 % if bundle_address:
   <li>bundle: <a href="{{bundle_url(bundle_address)}}">{{bundle_address}}</a></li>
 % end
