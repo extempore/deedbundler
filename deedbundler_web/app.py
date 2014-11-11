@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import os
 import re
 import json
 import zlib
@@ -49,6 +50,11 @@ def otc_url(name):
 	url = 'http://bitcoin-otc.com/viewratingdetail.php?nick={0}'
 	return url.format(quote_plus(name))
 
+def user_deeds_url(name):
+	host = CONFIG['hostname']
+	url = 'http://{0}/from/{1}'.format(host, name)
+	return url
+
 app = Bottle()
 TEMPLATE_PATH.append('/home/deedbot/app/deedbundler/deedbundler_web/templates/')
 
@@ -57,6 +63,7 @@ BaseTemplate.defaults['deed_url'] = deed_url
 BaseTemplate.defaults['bundle_url'] = bundle_url
 BaseTemplate.defaults['bundle_page_url'] = bundle_page_url
 BaseTemplate.defaults['otc_url'] = otc_url
+BaseTemplate.defaults['user_deeds_url'] = user_deeds_url
 
 @app.get('/')
 def index():
@@ -312,6 +319,20 @@ def bundles(page=0):
 	data = {'deeds': deeds, 'page': page, 'links': links}
 
 	return template('deeds.tpl', **data)
+
+@app.get('/trusted')
+def trusted():
+	jsfile = '/home/deedbot/app/www/trust.json'
+	mtime = os.path.getmtime(jsfile)
+	with open(jsfile) as f:
+		trusted = json.load(f)
+	
+	data = {
+		'trusted': trusted,
+		'modified': mtime,
+		}
+
+	return template('trusted.tpl', **data)
 
 ADDRESS_RX = re.compile('[0-9a-zA-Z]+$')
 def validate_address(s):

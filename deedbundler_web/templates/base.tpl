@@ -11,7 +11,7 @@
 </head>
 <body>
 
-<div id="nav">
+<div id="assnav">
 <center>
 <strong>
 <a href="http://bitcoin-assets.com/">home</a> | 
@@ -23,6 +23,20 @@
 <a href="http://wiki.bitcoin-assets.com/">wiki</a> 
 </strong>
 </center>
+</div>
+
+<div id="nav">
+<br/>
+<p>
+<center>
+<strong>
+<a href="http://deeds.bitcoin-assets.com/">index</a> |
+<a href="http://deeds.bitcoin-assets.com/deeds">deeds</a> |
+<a href="http://deeds.bitcoin-assets.com/bundles">bundles</a> |
+<a href="http://deeds.bitcoin-assets.com/trusted">trusted</a>
+</strong>
+</center>
+</p>
 </div>
 
 {{!base}}
