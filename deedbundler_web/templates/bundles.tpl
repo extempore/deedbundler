@@ -26,7 +26,7 @@
 
 <div class="pagination">
 <p>Page: 
-% for i, link in enumerate(links, 1):
+% for i, link in enumerate(links):
   % if i == page:
   <em>({{i}})</em> | 
   % else:

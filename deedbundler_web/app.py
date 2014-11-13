@@ -279,9 +279,9 @@ def bundles(page=0):
 		raise HTTPError(status=404)
 
 	links = []
-	max_page = (total / per_page)
+	max_page = int(total / per_page)
 	if  max_page > 0:
-		for i in xrange(1, max_page + 1):
+		for i in xrange(0, max_page + 1):
 			links.append(bundle_page_url(i))
 
 	data = {'bundles': bundles, 'page': page, 'links': links}
@@ -291,7 +291,7 @@ def bundles(page=0):
 @app.get('/deeds')
 @app.get('/deeds/')
 @app.get('/deeds/<page:int>')
-def bundles(page=0):
+def deeds(page=0):
 	db = get_db()
 	cursor = db.cursor()
 	per_page = CONFIG['deeds_per_page']
@@ -311,9 +311,9 @@ def bundles(page=0):
 		raise HTTPError(status=404)
 
 	links = []
-	max_page = (total / per_page)
+	max_page = int(total / per_page)
 	if  max_page > 0:
-		for i in xrange(1, max_page + 1):
+		for i in xrange(0, max_page + 1):
 			links.append(bundle_page_url(i, path='deeds'))
 
 	data = {'deeds': deeds, 'page': page, 'links': links}
@@ -326,7 +326,7 @@ def trusted():
 	mtime = os.path.getmtime(jsfile)
 	with open(jsfile) as f:
 		trusted = json.load(f)
-	
+
 	data = {
 		'trusted': trusted,
 		'modified': mtime,
