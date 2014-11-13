@@ -24,13 +24,14 @@ deeds_config = {
 
 	'max_deed_size': 32*1024,
 	'max_url_size': 256*1024,
-	'max_unconfirmed_bundles': 0,
 	'deeds_per_bundle': 32,
+	'deed_title_length': 100,
 	
 	'tx_amount': 10000,
 	'tx_fee': 1000,
 	'tx_confirm': 1,
 	'resend_tx_after': 30*60,
+	'max_unconfirmed_bundles': 0,
 
 	'wallet_pass': None,
 	'electrum_config': {

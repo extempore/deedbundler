@@ -1,3 +1,3 @@
 # -*- coding: utf-8 -*-
-from .otc import Otcdb
-from .util import raw_pastebin, extract_gpg
+from .otc import OTCDatabase, GPGManager
+from .util import raw_pastebin, extract_gpg_msg

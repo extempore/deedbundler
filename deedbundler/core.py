@@ -17,11 +17,10 @@ import gnupg
 
 from electrum import NetworkProxy, Wallet, WalletStorage, SimpleConfig, Transaction
 from electrum.daemon import get_daemon
-from electrum.bitcoin import b58encode, b58decode
 
 from .packages.coinkit import BitcoinPrivateKey
-from .otc import Otcdb, GPGManager
-from .util import raw_pastebin, extract_gpg, deed_title, electrum_start, electrum_stop
+from .otc import OTCDatabase, GPGManager
+from .util import raw_pastebin, extract_gpg_msg, deed_title, electrum_start, electrum_stop, b58encode, b58decode
 
 
 class Bundler(object):
@@ -35,9 +34,10 @@ class Bundler(object):
 		self.update_trust = update_trust
 		self.trusted = {}
 
+
 	def setup(self):
 		self.open_db()
-		self.otcdb = Otcdb(self.config['db_path'])
+		self.otcdb = OTCDatabase(self.config['db_path'])
 		self.gpg = GPGManager(self.config['gpg_path'])
 		self.load_assbot_trust()
 		# start electrum
@@ -54,10 +54,12 @@ class Bundler(object):
 			trust_updater.daemon = True
 			trust_updater.start()
 
+
 	def shutdown(self):
 		electrum_stop(self.network, self.wallet)
 		self.db.close()
 		time.sleep(1)
+
 
 	def tx_sender(self):
 		print 'tx_sender thread started'
@@ -75,10 +77,11 @@ class Bundler(object):
 			if not result[0]:
 				# sendtx failed, sleep and re-queue
 				print 'tx_sender: sendtx failed'
-				time.sleep(2)
+				time.sleep(3)
 				self.tx_queue.put(tx)
 			else:
 				print 'tx_sender: sent {0}'.format(tx.hash())
+
 
 	def trust_updater(self):
 		print 'trust_updater thread started'
@@ -105,6 +108,7 @@ class Bundler(object):
 			except Exception as e:
 				print 'trust_updater: {0}'.format(e)
 
+
 	def load_assbot_trust(self):
 		# get assbot trust
 		self.otcdb.open_db()
@@ -128,6 +132,7 @@ class Bundler(object):
 
 		return (new_keys, removed)
 
+
 	def export_trust(self):
 		#filename = '{0}/{1}'.format(self.config['db_path'], 'trust.sqlite')
 		#db = sqlite3.connect(filename, check_same_thread=False)
@@ -145,6 +150,7 @@ class Bundler(object):
 				self.db.commit()
 			except:
 				time.sleep(1)
+
 
 	def open_db(self):
 		filename = '{0}/{1}'.format(self.config['db_path'], self.config['db_name'])
@@ -186,6 +192,7 @@ class Bundler(object):
 		cursor.execute('CREATE INDEX d_address ON deeds (bundle_address)')
 		cursor.execute('CREATE INDEX b_address ON bundles (address)')
 		self._commit()
+
 
 	def queue_deeds(self, deeds):
 		if not deeds:
@@ -243,6 +250,7 @@ class Bundler(object):
 
 		return (True, 'ok')
 
+
 	def make_bundle(self):
 		status, msg = self.should_bundle()
 		if not status:
@@ -296,9 +304,9 @@ class Bundler(object):
 		# make transaction
 		try:
 			tx = self.make_tx(address)
+			txid = tx.hash()
 		except:
 			return (False, 'mktx_fail')
-		txid = tx.hash()
 
 		# mark deeds as bundled
 		ids = ','.join(str(dh[1]) for dh in deed_hashes)
@@ -325,10 +333,12 @@ class Bundler(object):
 			self.tx_queue.put(tx)
 
 		return (True, (deed_count, address))
+
 	
 	def confirm_bundle(self):
 		cursor = self.db.cursor()
-		check_bundles = 'SELECT id, txid, bundle_hash, address, created_at FROM bundles WHERE confirmed_at = 0 ORDER BY created_at DESC LIMIT 1'
+		check_bundles = """SELECT id, txid, bundle_hash, address, created_at, num_deeds FROM bundles 
+				WHERE confirmed_at = 0 ORDER BY created_at DESC LIMIT 1"""
 		row = cursor.execute(check_bundles).fetchone()
 		if not row:
 			return (False, 'no_unconfirmed')
@@ -343,7 +353,7 @@ class Bundler(object):
 			update = 'UPDATE bundles SET confirmed_at = ? WHERE id = ?'
 			cursor.execute(update, (int(timestamp), row['id']))
 			self._commit()
-			return (True, (address, txid))
+			return (True, (address, row['num_deeds'], txid))
 
 		if since_creation > self.config['resend_tx_after']:
 			# has the wallet even heard of this txid?
@@ -357,9 +367,10 @@ class Bundler(object):
 
 			try:
 				new_tx = self.make_tx(address)
+				new_txid = new_tx.hash()
 			except:
 				return (False, 'retry_mktx_fail')
-			new_txid = new_tx.hash()
+			
 			if txid != new_txid:
 				update_txid = 'UPDATE bundles SET txid = ? WHERE id = ?'
 				cursor.execute(update_txid, (new_txid, row['id']))
@@ -369,6 +380,7 @@ class Bundler(object):
 			return (False, 'retried_tx')
 
 		return (False, 'waiting_for_confirm')
+
 
 	def status(self):
 		cursor = self.db.cursor()
@@ -386,68 +398,81 @@ class Bundler(object):
 
 		return (pending, last_bundle, unconfirmed)
 
+
 	def find_deeds(self, url):
 		url = raw_pastebin(url)
 		r = requests.get(url)
 		return self.save_deeds(r.content)
 
-	def save_deeds(self, content):
-		deeds, errors = self.parse_deeds(content)
-		self.queue_deeds(deeds)
-		return (len(deeds), errors)		
 
-	def parse_deeds(self, content):
-		filtered = []
-		errors = defaultdict(int)
+	def save_deeds(self, content):
+		deeds, errors = self.extract_deeds(content)
+		self.queue_deeds(deeds)
+		d = [(i[1],i[3],i[5]) for i in deeds]
+		return (d, errors)		
+
+
+	def extract_deeds(self, content):
+		good_deeds = []
+		errors = []
 		# extract signed messages
-		deeds = extract_gpg(content)
+		deeds = extract_gpg_msg(content)
 		if not deeds:
-			return (filtered, errors)
+			return (good_deeds, errors)
 
 		cursor = self.db.cursor()
-		for deed in deeds:
-			# hash deed
-			dh = hashlib.sha256(deed)
-			deed_hash = dh.hexdigest()
-			# encode hash
-			b58_hash = b58encode(dh.digest())
-			# skip if deed already exists
-			sel = 'SELECT id FROM deeds WHERE b58_hash = ?'
-			if cursor.execute(sel, (b58_hash,)).fetchone():
-				errors['dupe'] += 1
-				continue
-			# skip if deed is too big
-			if len(deed) > self.config['max_deed_size']:
-				errors['too_big'] += 1
-				continue
-			# make sure signature is valid and trusted
-			result = self.gpg.verify(deed)
-			if result.valid:
-				# check if trusted
-				if result.fingerprint in self.trusted:
-					fingerprint = result.fingerprint
-				elif result.pubkey_fingerprint in self.trusted:
-					fingerprint = result.pubkey_fingerprint
-				else:
-					errors['untrusted'] += 1
-					continue
-				# parse deed title
-				title = deed_title(deed)
-
-				otc_name = self.trusted[fingerprint][0]
-				data = (fingerprint, otc_name, deed_hash, b58_hash, deed, title)
-				filtered.append(data)
-
+		for i,deed in enumerate(deeds,1):
+			status, msg = self.parse_deed(deed)
+			if status:
+				good_deeds.append(msg)
 			else:
-				errors['invalid'] += 1
+				errors.append((i, msg))
+		return (good_deeds, errors)
 
-		return (filtered, errors)
+
+	def parse_deed(self, deed):
+		# skip if deed is too big
+		if len(deed) > self.config['max_deed_size']:
+			return (False, 'too_big')
+
+		# hash deed
+		dh = hashlib.sha256(deed)
+		deed_hash = dh.hexdigest()
+		# encode hash
+		b58_hash = b58encode(dh.digest())
+
+		cursor = self.db.cursor()
+		# skip if deed already exists
+		sel = 'SELECT id FROM deeds WHERE b58_hash = ?'
+		if cursor.execute(sel, (b58_hash,)).fetchone():
+			return (False, 'dupe')
+
+		# make sure signature is valid and trusted
+		result = self.gpg.verify(deed)
+		if result.valid:
+			# check if trusted
+			if result.fingerprint in self.trusted:
+				fingerprint = result.fingerprint
+			elif result.pubkey_fingerprint in self.trusted:
+				fingerprint = result.pubkey_fingerprint
+			else:
+				return (False, 'untrusted')
+
+			# parse deed title
+			title = deed_title(deed, self.config['deed_title_length'])
+			otc_name = self.trusted[fingerprint][0]
+			deed_data = (fingerprint, otc_name, deed_hash, b58_hash, deed, title)
+			return (True, deed_data)
+		else:
+			return (False, 'invalid')
+
 
 	def make_address(self, bundle_hash):
 		k = BitcoinPrivateKey(bundle_hash)
 		address = k.public_key().address()
 		wif = k.to_wif()
 		return (address, wif)
+
 
 	def make_tx(self, address):
 		# update wallet so we have the latest inputs
@@ -460,6 +485,7 @@ class Bundler(object):
 		tx = self.wallet.mktx(outputs, password, fee, change_addr)	
 		return tx
 
+
 	def make_custom_tx(self, address, amount):
 		# update wallet so we have the latest inputs
 		#self.wallet.update()
@@ -471,19 +497,21 @@ class Bundler(object):
 		tx = self.wallet.mktx(outputs, password, fee, change_addr)	
 		return tx
 
+
 	def num_bundles_left(self):
 		confirmed, unconfirmed = self.main_balance()
 		per_bundle = self.config['tx_amount'] + self.config['tx_fee']
 		num = int(confirmed / per_bundle)
 		return num
 
+
 	def main_balance(self):
 		return self.wallet.get_addr_balance(self.config['main_address'])
+
 
 	def addr_balance(self, addr):
 		out = self.network.synchronous_get([ ('blockchain.address.get_balance',[addr]) ])[0]
 		out["confirmed"] = str(Decimal(out["confirmed"])/100000000)
 		out["unconfirmed"] = str(Decimal(out["unconfirmed"])/100000000)
 		return out
-
 

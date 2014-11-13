@@ -7,7 +7,7 @@ import requests
 import gnupg
 
 
-class Otcdb(object):
+class OTCDatabase(object):
 	gpg_file = 'GPG.db'
 	rating_file = 'RatingSystem.db'
 

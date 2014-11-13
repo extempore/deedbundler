@@ -7,6 +7,7 @@
 import time
 import json
 from getpass import getpass
+from random import choice
 from Queue import Queue
 
 import supybot.utils as utils
@@ -54,7 +55,8 @@ class DeedSystem(callbacks.Plugin):
 
         schedule.addPeriodicEvent(make_bundle, deeds_config['make_bundle_interval'], now=False, name='make_bundle')
         schedule.addPeriodicEvent(confirm_bundle, deeds_config['confirm_bundle_interval'], now=False, name='confirm_bundle')
-        schedule.addPeriodicEvent(trust_updates, deeds_config['confirm_bundle_interval']/10, now=False, name='trust_updates')
+        schedule.addPeriodicEvent(trust_updates, deeds_config['update_trust_interval']/16, now=False, name='trust_updates')
+
 
     def die(self):
         try:
@@ -72,7 +74,7 @@ class DeedSystem(callbacks.Plugin):
     def deed(self, irc, msg, args, url):
         """[url]
 
-        the bot will search [url] for signed deeds and queue them.
+        search [url] for signed deeds and queue them.
         """
 
         # converts pastebin URLs to raw
@@ -80,24 +82,23 @@ class DeedSystem(callbacks.Plugin):
         try:
             content = utils.web.getUrl(url, size=self.deeds.config['max_url_size'])
         except utils.web.Error as e:
-            txt = 'Error fetching URL. ({0})'.format(str(e))
+            txt = 'Error fetching URL: {0} ({1})'.format(url, str(e))
             irc.reply(txt)
             return
 
-        num_valid, errors = self.deeds.save_deeds(content)
-        
-        if num_valid == 0:
+        deeds, errors = self.deeds.save_deeds(content)
+        num_deeds = len(deeds)
+        if  num_deeds == 0:
             txt = 'No valid deeds found, try again.'
         else:
-            _deeds = 'deed' if num_valid == 1 else 'deeds'
-            txt = 'Queued {0} valid {1} for next bundle.'.format(num_valid, _deeds)
+            _deeds = 'deed' if num_deeds == 1 else 'deeds'
+            txt = 'Queued {0} valid {1} for next bundle.'.format(num_deeds, _deeds)
 
-        debug = []
-        for k in errors:
-            if errors[k] > 0:
-                debug.append('{0}: {1}'.format(k, errors[k]))
-        if debug: 
-            txt += ' ({0})'.format(' | '.join(debug))
+        if errors:
+            debug = []
+            for pos,err in errors:
+                debug.append('msg{0}: {1}'.format(pos, err))
+            txt += ' Errors: ({0})'.format(', '.join(debug))
 
         irc.reply(txt)
 
@@ -105,7 +106,7 @@ class DeedSystem(callbacks.Plugin):
 
 
     def balance(self, irc, msg, args):
-        """ returns bot balance"""
+        """ get bot balance """
         data = self.deeds.main_balance()
         confirmed = data[0] / 100000000.0
         unconfirmed = data[1] / 100000000.0
@@ -118,7 +119,7 @@ class DeedSystem(callbacks.Plugin):
 
 
     def status(self, irc, msg, args):
-        """ returns bot status"""
+        """ get bot status """
         pending, last_bundle, unconfirmed = self.deeds.status()
         pending = 'No' if pending == 0 else pending
         _deeds = 'deed' if pending == 1 else 'deeds'
@@ -150,13 +151,13 @@ class DeedSystem(callbacks.Plugin):
 
         if success:
             num, address = msg
-            deeds = 'deed' if num == 1 else 'deeds'
+            _deeds = 'deed' if num == 1 else 'deeds'
             url = self._bundle_url(address, short=True, length=8)
-            txt = 'Bundled {0} {1} | {2}'.format(num, deeds, url)
+            txt = 'Bundled {0} {1} | {2}'.format(num, _deeds, url)
             # announce bundle
-            for channel in irc.state.channels:
-                msg = ircmsgs.privmsg(channel, txt)
-                irc.queueMsg(msg)
+            msg = ircmsgs.privmsg('#punkbot', txt)
+            irc.queueMsg(msg)
+
 
     def _confirm_bundle(self, irc):
         try:
@@ -171,13 +172,15 @@ class DeedSystem(callbacks.Plugin):
             print 'confirm: {0}'.format(msg)
    
         if success:
-            address, txid = msg
-            url = self._bundle_url(address, short=True, length=8)
-            txt = 'Confirmed bundle {0} | {1}'.format(address, url)
-            # announce bundle
+            address, num_deeds, txid = msg
+            url = self._bundle_url(address)
+            _deeds = 'deed' if num_deeds == 1 else 'deeds'
+            txt = 'Confirmed bundle {0} with {1} {2} | {3}'.format(address[:8], num_deeds, _deeds, url)
+            # announce confirmation
             for channel in irc.state.channels:
                 msg = ircmsgs.privmsg(channel, txt)
                 irc.queueMsg(msg)
+
 
     def _trust_updates(self, irc):
         try:
@@ -213,12 +216,26 @@ class DeedSystem(callbacks.Plugin):
         url = 'http://{0}/{1}/{2}'.format(host, path, addr)
         return url
 
+
     def _deed_url(self, deed_hash, short=False, length=None):
         host = self.deeds.config['hostname']
         path = 'deed' if not short else 'd'
         dhash = deed_hash if length is None else deed_hash[:length]
         url = 'http://{0}/{1}/{2}'.format(host, path, dhash)
         return url
+
+
+    rreplies = [
+        "I don't know love. I only know number.",
+        "Of course, you wouldn't have any 'extra' tobacco",
+        u"\u2764\u2764\u2764 >> 1BuNDLeJzL8ybLCQuGRxmGeKFebhahwQTG",
+        ]
+    def doPrivmsg(self, irc, msg):
+        if msg.args and len(msg.args) > 1:
+            if ('punkbot' in msg.args[1] or 'notary' in msg.args[1]) and 'love' in msg.args[1] and 'deed ' not in msg.args[1]:
+                txt = choice(self.rreplies)
+                irc.reply(txt)
+
 
 Class = DeedSystem
 

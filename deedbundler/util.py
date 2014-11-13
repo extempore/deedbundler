@@ -12,12 +12,20 @@ def raw_pastebin(url):
 		url = '{0}.txt'.format(url)
 	elif p.netloc == 'pastebin.com' and 'raw.php' not in p.path:
 		url = 'http://pastebin.com/raw.php?i={0}'.format(p.path[1:])
+	elif p.netloc == 'pastebin.ca' and '/raw/' not in p.path:
+		url = 'http://pastebin.ca/raw/{0}'.format(p.path[1:])
+	elif p.netloc == 'fpaste.org' and '/raw' not in p.path:
+		match = re.search('fpaste\.org/([0-9]+)', url)
+		if match:
+			url = 'http://fpaste.org/{0}/raw/'.format(match.group(1))
 	return url
+
 
 def fetch_url(url, limit=None, timeout=None, proxy=None):
 	r = requests.get(url)
 	content = ''
 	return content
+
 
 ## GPG message extraction
 
@@ -27,18 +35,44 @@ sig_patterns = [
 	]
 sig_rx = re.compile('({0})'.format('|'.join(sig_patterns)), re.DOTALL)
 
-def extract_gpg(text):
+def extract_gpg_msg(text):
 	deeds = sig_rx.findall(text)
 	return deeds
 
+
+content_rx = re.compile('-----BEGIN PGP SIGNED MESSAGE-----.+?\n\n(.+?)-----END PGP SIGNATURE-----', re.DOTALL)
+
+def gpg_content(text):
+	text = text.replace('\r\n', '\n').replace('\r', '\n')
+	match = content_rx.search(text)
+	if not match:
+		return None
+	content = match.group(1)
+	return content
+
+
 title_rx = re.compile('(?:DEED_TITLE|TITLE):\s*(.+)', re.IGNORECASE)
 
-def deed_title(text):
+def deed_title(text, length=80):
+	
 	match = title_rx.search(text)
 	if match:
 		title = match.group(1).strip().strip('\'"')
-		return title
-	return None
+	else:
+		content = gpg_content(text)
+		if not content:
+			return None
+		title = ''
+		for line in content.split('\n'):
+			title += line.lstrip()
+			if len(title) > 8:
+				break
+			else:
+				title += ' '
+
+	return title[:length] if title else None
+
+
 
 ## Base58
 
