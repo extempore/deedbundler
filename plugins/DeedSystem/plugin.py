@@ -228,7 +228,7 @@ class DeedSystem(callbacks.Plugin):
     rreplies = [
         "I don't know love. I only know number.",
         "Of course, you wouldn't have any 'extra' tobacco",
-        u"\u2764\u2764\u2764 >> 1BuNDLeJzL8ybLCQuGRxmGeKFebhahwQTG",
+        u"\u2764 >> 1BuNDLeJzL8ybLCQuGRxmGeKFebhahwQTG",
         ]
     def doPrivmsg(self, irc, msg):
         if msg.args and len(msg.args) > 1:

@@ -31,6 +31,7 @@ deeds_config = {
 	'tx_fee': 1000,
 	'tx_confirm': 1,
 	'resend_tx_after': 30*60,
+	'sendtx_timeout': 90,
 	'max_unconfirmed_bundles': 0,
 
 	'wallet_pass': None,

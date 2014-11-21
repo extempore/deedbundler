@@ -69,16 +69,17 @@ class Bundler(object):
 				print 'txsender: wtfisthis: {0}'.format(tx)
 				time.sleep(1)
 				continue
+
 			try:
-				result = self.wallet.sendtx(tx)
+				result = self.send_tx(tx)
 			except Exception as e:
-				print 'txsender: {0}'.format(e)
+				print 'txsender: exception: {0}'.format(e)
+				continue
 
 			if not result[0]:
-				# sendtx failed, sleep and re-queue
-				print 'tx_sender: sendtx failed'
-				time.sleep(3)
-				self.tx_queue.put(tx)
+				print 'tx_sender: sendtx fail: {0}'.format(result[1])
+				#time.sleep(10)
+				#self.tx_queue.put(tx)
 			else:
 				print 'tx_sender: sent {0}'.format(tx.hash())
 
@@ -93,8 +94,8 @@ class Bundler(object):
 
 				if new_keys:
 					self.gpg.recv_keys(new_keys)
-				if removed:
-					self.gpg.delete_keys([r[0] for r in removed])
+				#if removed:
+				#	self.gpg.delete_keys([r[0] for r in removed])
 				
 				# get changed nicknames
 				changed = (
@@ -464,7 +465,10 @@ class Bundler(object):
 			deed_data = (fingerprint, otc_name, deed_hash, b58_hash, deed, title)
 			return (True, deed_data)
 		else:
-			return (False, 'invalid')
+			if results.status == 'no public key':
+				return (False, 'no_pubkey')
+			else:
+				return (False, 'invalid')
 
 
 	def make_address(self, bundle_hash):
@@ -497,6 +501,12 @@ class Bundler(object):
 		tx = self.wallet.mktx(outputs, password, fee, change_addr)	
 		return tx
 
+	def send_tx(self, tx):
+		h = self.wallet.send_tx(tx)
+		timeout = self.config['sendtx_timeout']
+		if not self.wallet.tx_event.wait(timeout):
+			return (False, 'timeout')
+		return self.wallet.receive_tx(h, tx)
 
 	def num_bundles_left(self):
 		confirmed, unconfirmed = self.main_balance()

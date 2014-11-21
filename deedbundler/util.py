@@ -29,18 +29,15 @@ def fetch_url(url, limit=None, timeout=None, proxy=None):
 
 ## GPG message extraction
 
-sig_patterns = [
-	'-----BEGIN PGP SIGNED MESSAGE-----.+?-----END PGP SIGNATURE-----',
-	'-----BEGIN PGP MESSAGE-----.+?-----END PGP MESSAGE-----'
-	]
-sig_rx = re.compile('({0})'.format('|'.join(sig_patterns)), re.DOTALL)
+sig_patterns = r'(-----BEGIN PGP SIGNED MESSAGE-----.+?(?<!- )-----END PGP SIGNATURE-----|-----BEGIN PGP MESSAGE-----.+?(?<!- )-----END PGP MESSAGE-----)'
+sig_rx = re.compile(sig_patterns, re.DOTALL)
 
 def extract_gpg_msg(text):
 	deeds = sig_rx.findall(text)
 	return deeds
 
 
-content_rx = re.compile('-----BEGIN PGP SIGNED MESSAGE-----.+?\n\n(.+?)-----END PGP SIGNATURE-----', re.DOTALL)
+content_rx = re.compile(r'-----BEGIN PGP SIGNED MESSAGE-----.+?\n\n(.+?)(?<!- )-----BEGIN PGP SIGNATURE-----', re.DOTALL)
 
 def gpg_content(text):
 	text = text.replace('\r\n', '\n').replace('\r', '\n')
