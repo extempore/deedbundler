@@ -7,12 +7,13 @@ import requests
 import gnupg
 
 
-class OTCDatabase(object):
+class OTCDB(object):
 	gpg_file = 'GPG.db'
 	rating_file = 'RatingSystem.db'
 
 	def __init__(self, path):
 		self.path = path
+		self.trusted = {}
 
 	def open_db(self):
 		gpg_path = '{0}/{1}'.format(self.path, self.gpg_file)
@@ -53,6 +54,24 @@ class OTCDatabase(object):
 				return True
 		else:
 			return False
+
+	def update_trust(self):
+		self.update_db()
+
+		self.open_db()
+		new_trust = self.assbot_trust()
+		self.close_db()
+
+		return new_trust
+
+	def trust_diff(self, old, new):
+		new_keys = set(new.keys())
+		old_keys = set(old.keys())
+		added_keys = list(new_keys - old_keys)
+		removed_keys = list(old_keys - new_keys)
+		# add metadata in removed list before we throw it away
+		removed_keys = [(rk, old[rk][0]) for rk in removed_keys]
+		return (added_keys, removed_keys)
 
 	def assbot_trust(self):
 		assbot_ratings = defaultdict(int)

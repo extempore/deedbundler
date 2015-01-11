@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name='deedbundler',
-    version='0.6',
+    version='0.7',
     url='https://github.com/extempore/deedbundler',
     license='Proprietary',
     author='punkman',

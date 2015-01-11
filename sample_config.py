@@ -31,6 +31,7 @@ deeds_config = {
 	'tx_fee': 1000,
 	'tx_confirm': 1,
 	'resend_tx_after': 30*60,
+	'sendtx_retry_between': 15*60,
 	'sendtx_timeout': 90,
 	'max_unconfirmed_bundles': 0,
 
@@ -46,7 +47,7 @@ deeds_config = {
 
 if __name__ == '__main__':
 
-	with open('./deeds_config.json', 'w') as f:
+	with open('./bot_config.json', 'w') as f:
 		c = json.dumps(deeds_config, sort_keys=True, indent=2)
 		f.write(c)
 
